@@ -14,10 +14,12 @@ type Service struct {
 }
 
 func NewService(repo repository.RepositoryInterface) *Service {
+	fmt.Println("NewService called")
 	return &Service{repo: repo}
 }
 
 func (s *Service) CreateBrand(ctx context.Context, brand *model.Brand) error {
+	fmt.Println("Service.CreateBrand called")
 	if brand.Name == "" {
 		return errors.New("brand name is required")
 	}

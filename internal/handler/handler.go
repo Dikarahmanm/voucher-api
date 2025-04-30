@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,10 +16,12 @@ type Handler struct {
 }
 
 func NewHandler(svc *service.Service) *Handler {
+	fmt.Println("NewHandler called")
 	return &Handler{svc: svc}
 }
 
 func (h *Handler) CreateBrand(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("CreateBrand called")
 	var brand model.Brand
 	if err := json.NewDecoder(r.Body).Decode(&brand); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
