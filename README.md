@@ -1,4 +1,4 @@
-```markdown
+
 🎟️ Voucher API
 
 A RESTful API to manage **brands**, **vouchers**, **customers**, and **redemption transactions** — built with **Go** and **PostgreSQL**. This API empowers you to create, fetch, and redeem vouchers efficiently while tracking customer points and transactions.
