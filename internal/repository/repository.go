@@ -6,7 +6,7 @@ import (
 	"voucher-api/internal/model"
 )
 
-// TxInterface defines the methods for a database transaction.
+// TxInterface defines the methods for a transaction.
 type TxInterface interface {
 	Commit() error
 	Rollback() error

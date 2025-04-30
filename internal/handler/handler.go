@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"voucher-api/internal/model"
 	"voucher-api/internal/service"
 )
@@ -24,7 +26,11 @@ func (h *Handler) CreateBrand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.CreateBrand(r.Context(), &brand); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if strings.Contains(err.Error(), "brand name is required") {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "Failed to create brand: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -41,7 +47,11 @@ func (h *Handler) CreateVoucher(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.CreateVoucher(r.Context(), &voucher); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if strings.Contains(err.Error(), "invalid voucher data") {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "Failed to create voucher: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -60,11 +70,16 @@ func (h *Handler) GetVoucher(w http.ResponseWriter, r *http.Request) {
 
 	voucher, err := h.svc.GetVoucher(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Voucher not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Failed to get voucher: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(voucher)
 }
 
@@ -78,11 +93,12 @@ func (h *Handler) GetVouchersByBrand(w http.ResponseWriter, r *http.Request) {
 
 	vouchers, err := h.svc.GetVouchersByBrand(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to get vouchers: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(vouchers)
 }
 
@@ -95,7 +111,15 @@ func (h *Handler) MakeRedemption(w http.ResponseWriter, r *http.Request) {
 
 	transaction, err := h.svc.MakeRedemption(r.Context(), &req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if strings.Contains(err.Error(), "invalid redemption request") || strings.Contains(err.Error(), "insufficient points") {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if strings.Contains(err.Error(), "customer not found") || strings.Contains(err.Error(), "voucher") && strings.Contains(err.Error(), "not found") {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Failed to process redemption: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -105,16 +129,20 @@ func (h *Handler) MakeRedemption(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTransactionDetail(w http.ResponseWriter, r *http.Request) {
-	transactionIDStr := r.URL.Query().Get("transactionId")
-	transactionID, err := strconv.Atoi(transactionIDStr)
-	if err != nil || transactionID <= 0 {
+	idStr := r.URL.Query().Get("transactionId")
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
 		http.Error(w, "Invalid transaction ID", http.StatusBadRequest)
 		return
 	}
 
-	transaction, err := h.svc.GetTransactionDetail(r.Context(), transactionID)
+	transaction, err := h.svc.GetTransactionDetail(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Transaction not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Failed to get transaction: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -122,6 +150,7 @@ func (h *Handler) GetTransactionDetail(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(transaction)
 }
+
 func (h *Handler) CreateCustomer(w http.ResponseWriter, r *http.Request) {
 	var customer model.Customer
 	if err := json.NewDecoder(r.Body).Decode(&customer); err != nil {
@@ -130,7 +159,11 @@ func (h *Handler) CreateCustomer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.CreateCustomer(r.Context(), &customer); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if strings.Contains(err.Error(), "invalid customer data") {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "Failed to create customer: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

@@ -35,9 +35,8 @@ func (m *MockTx) ExecContext(ctx context.Context, query string, args ...interfac
 }
 
 func (m *MockTx) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	// Simulate a row that returns ID=1 and CreatedAt for CreateTransaction
-	row := &sql.Row{}
-	return row
+	// Simulate a row for CreateTransaction
+	return &sql.Row{}
 }
 
 // mockResult simulates a sql.Result for testing.
@@ -46,6 +45,7 @@ type mockResult struct{}
 func (m *mockResult) LastInsertId() (int64, error) { return 1, nil }
 func (m *mockResult) RowsAffected() (int64, error) { return 1, nil }
 
+// MockRepository implements RepositoryInterface for testing.
 type MockRepository struct{}
 
 func (m *MockRepository) BeginTx(ctx context.Context, opts *sql.TxOptions) (repository.TxInterface, error) {
@@ -65,6 +65,9 @@ func (m *MockRepository) CreateVoucher(ctx context.Context, voucher *model.Vouch
 }
 
 func (m *MockRepository) GetVoucher(ctx context.Context, id int) (*model.Voucher, error) {
+	if id == 999 {
+		return nil, sql.ErrNoRows
+	}
 	return &model.Voucher{
 		ID:           id,
 		BrandID:      1,
@@ -77,6 +80,9 @@ func (m *MockRepository) GetVoucher(ctx context.Context, id int) (*model.Voucher
 }
 
 func (m *MockRepository) GetVouchersByBrand(ctx context.Context, brandID int) ([]*model.Voucher, error) {
+	if brandID == 999 {
+		return []*model.Voucher{}, nil
+	}
 	return []*model.Voucher{{
 		ID:           1,
 		BrandID:      brandID,
@@ -99,6 +105,9 @@ func (m *MockRepository) CreateTransactionVoucher(ctx context.Context, tx reposi
 }
 
 func (m *MockRepository) GetTransaction(ctx context.Context, id int) (*model.Transaction, error) {
+	if id == 999 {
+		return nil, sql.ErrNoRows
+	}
 	return &model.Transaction{
 		ID:          id,
 		CustomerID:  1,
@@ -109,6 +118,9 @@ func (m *MockRepository) GetTransaction(ctx context.Context, id int) (*model.Tra
 }
 
 func (m *MockRepository) GetCustomer(ctx context.Context, id int) (*model.Customer, error) {
+	if id == 999 {
+		return nil, sql.ErrNoRows
+	}
 	return &model.Customer{
 		ID:            id,
 		Name:          "John Doe",
@@ -151,6 +163,23 @@ func TestCreateBrand(t *testing.T) {
 	}
 }
 
+func TestCreateBrandInvalidInput(t *testing.T) {
+	repo := &MockRepository{}
+	svc := service.NewService(repo)
+	h := handler.NewHandler(svc)
+
+	brand := model.Brand{Name: ""} // Invalid: empty name
+	body, _ := json.Marshal(brand)
+	req, _ := http.NewRequest("POST", "/brand", bytes.NewBuffer(body))
+	rr := httptest.NewRecorder()
+
+	h.CreateBrand(rr, req)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("Expected status %v, got %v", http.StatusBadRequest, status)
+	}
+}
+
 func TestCreateVoucher(t *testing.T) {
 	repo := &MockRepository{}
 	svc := service.NewService(repo)
@@ -180,6 +209,27 @@ func TestCreateVoucher(t *testing.T) {
 	}
 }
 
+func TestCreateVoucherInvalidInput(t *testing.T) {
+	repo := &MockRepository{}
+	svc := service.NewService(repo)
+	h := handler.NewHandler(svc)
+
+	voucher := model.Voucher{
+		BrandID: 0, // Invalid: zero brand ID
+		Code:    "",
+		Name:    "",
+	}
+	body, _ := json.Marshal(voucher)
+	req, _ := http.NewRequest("POST", "/voucher", bytes.NewBuffer(body))
+	rr := httptest.NewRecorder()
+
+	h.CreateVoucher(rr, req)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("Expected status %v, got %v", http.StatusBadRequest, status)
+	}
+}
+
 func TestGetVoucher(t *testing.T) {
 	repo := &MockRepository{}
 	svc := service.NewService(repo)
@@ -198,6 +248,21 @@ func TestGetVoucher(t *testing.T) {
 	json.NewDecoder(rr.Body).Decode(&response)
 	if response.ID != 1 || response.Code != "VOUCHER1" {
 		t.Errorf("Unexpected response: %+v", response)
+	}
+}
+
+func TestGetVoucherNotFound(t *testing.T) {
+	repo := &MockRepository{}
+	svc := service.NewService(repo)
+	h := handler.NewHandler(svc)
+
+	req, _ := http.NewRequest("GET", "/voucher?id=999", nil)
+	rr := httptest.NewRecorder()
+
+	h.GetVoucher(rr, req)
+
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("Expected status %v, got %v", http.StatusNotFound, status)
 	}
 }
 
@@ -228,6 +293,26 @@ func TestCreateCustomer(t *testing.T) {
 	}
 }
 
+func TestCreateCustomerInvalidInput(t *testing.T) {
+	repo := &MockRepository{}
+	svc := service.NewService(repo)
+	h := handler.NewHandler(svc)
+
+	customer := model.Customer{
+		Name:  "",
+		Email: "", // Invalid: empty name and email
+	}
+	body, _ := json.Marshal(customer)
+	req, _ := http.NewRequest("POST", "/customer", bytes.NewBuffer(body))
+	rr := httptest.NewRecorder()
+
+	h.CreateCustomer(rr, req)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("Expected status %v, got %v", http.StatusBadRequest, status)
+	}
+}
+
 func TestGetVouchersByBrand(t *testing.T) {
 	repo := &MockRepository{}
 	svc := service.NewService(repo)
@@ -246,6 +331,27 @@ func TestGetVouchersByBrand(t *testing.T) {
 	json.NewDecoder(rr.Body).Decode(&response)
 	if len(response) != 1 || response[0].ID != 1 || response[0].BrandID != 1 {
 		t.Errorf("Unexpected response: %+v", response)
+	}
+}
+
+func TestGetVouchersByBrandEmpty(t *testing.T) {
+	repo := &MockRepository{}
+	svc := service.NewService(repo)
+	h := handler.NewHandler(svc)
+
+	req, _ := http.NewRequest("GET", "/voucher/brand?id=999", nil)
+	rr := httptest.NewRecorder()
+
+	h.GetVouchersByBrand(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("Expected status %v, got %v", http.StatusOK, status)
+	}
+
+	var response []*model.Voucher
+	json.NewDecoder(rr.Body).Decode(&response)
+	if len(response) != 0 {
+		t.Errorf("Expected empty response, got %+v", response)
 	}
 }
 
@@ -275,6 +381,66 @@ func TestMakeRedemption(t *testing.T) {
 	}
 }
 
+func TestMakeRedemptionInvalidCustomer(t *testing.T) {
+	repo := &MockRepository{}
+	svc := service.NewService(repo)
+	h := handler.NewHandler(svc)
+
+	redemption := model.RedemptionRequest{
+		CustomerID: 999, // Non-existent customer
+		Vouchers:   []model.TransactionVoucher{{VoucherID: 1, Quantity: 2}},
+	}
+	body, _ := json.Marshal(redemption)
+	req, _ := http.NewRequest("POST", "/transaction/redemption", bytes.NewBuffer(body))
+	rr := httptest.NewRecorder()
+
+	h.MakeRedemption(rr, req)
+
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("Expected status %v, got %v", http.StatusNotFound, status)
+	}
+}
+
+func TestMakeRedemptionInvalidVoucher(t *testing.T) {
+	repo := &MockRepository{}
+	svc := service.NewService(repo)
+	h := handler.NewHandler(svc)
+
+	redemption := model.RedemptionRequest{
+		CustomerID: 1,
+		Vouchers:   []model.TransactionVoucher{{VoucherID: 999, Quantity: 2}}, // Non-existent voucher
+	}
+	body, _ := json.Marshal(redemption)
+	req, _ := http.NewRequest("POST", "/transaction/redemption", bytes.NewBuffer(body))
+	rr := httptest.NewRecorder()
+
+	h.MakeRedemption(rr, req)
+
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("Expected status %v, got %v", http.StatusNotFound, status)
+	}
+}
+
+func TestMakeRedemptionInsufficientPoints(t *testing.T) {
+	repo := &MockRepository{}
+	svc := service.NewService(repo)
+	h := handler.NewHandler(svc)
+
+	redemption := model.RedemptionRequest{
+		CustomerID: 1,
+		Vouchers:   []model.TransactionVoucher{{VoucherID: 1, Quantity: 10}}, // Requires 500,000 points
+	}
+	body, _ := json.Marshal(redemption)
+	req, _ := http.NewRequest("POST", "/transaction/redemption", bytes.NewBuffer(body))
+	rr := httptest.NewRecorder()
+
+	h.MakeRedemption(rr, req)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("Expected status %v, got %v", http.StatusBadRequest, status)
+	}
+}
+
 func TestGetTransactionDetail(t *testing.T) {
 	repo := &MockRepository{}
 	svc := service.NewService(repo)
@@ -293,5 +459,20 @@ func TestGetTransactionDetail(t *testing.T) {
 	json.NewDecoder(rr.Body).Decode(&response)
 	if response.ID != 1 || response.CustomerID != 1 {
 		t.Errorf("Unexpected response: %+v", response)
+	}
+}
+
+func TestGetTransactionDetailNotFound(t *testing.T) {
+	repo := &MockRepository{}
+	svc := service.NewService(repo)
+	h := handler.NewHandler(svc)
+
+	req, _ := http.NewRequest("GET", "/transaction/redemption?transactionId=999", nil)
+	rr := httptest.NewRecorder()
+
+	h.GetTransactionDetail(rr, req)
+
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("Expected status %v, got %v", http.StatusNotFound, status)
 	}
 }
