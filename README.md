@@ -36,7 +36,7 @@ Ensure the following are installed on your machine:
 1. **Clone the repository**
 
 ```powershell
-git clone https://github.com/yourusername/voucher-api.git
+git clone https://github.com/Dikarahmanm/voucher-api.git
 cd voucher-api
 ```
 
